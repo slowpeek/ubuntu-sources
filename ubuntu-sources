@@ -191,14 +191,14 @@ set_distro () {
 
         if [[ $suspect == "$release" || $suspect == "$name" ]]; then
             distro=$name
-            is_current=${status-n}
+            is_current=${status:-n}
             return
         fi
     done
 
     # Check for single-word names.
 
-    if [[ ${#suspect} -gt 3 && -z ${suspect//[a-z]/} ]]; then
+    if [[ ${#suspect} -gt 3 && $suspect == +([a-z]) ]]; then
         log_warn "The script is not aware of Ubuntu ${suspect^}." \
                  "It may be a new release or you spelled it wrong"
 
