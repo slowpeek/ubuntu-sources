@@ -177,11 +177,10 @@ set_distro () {
     local pool=()
     set_pool
 
-    distro=
-    local suspect=${1,,}
+    distro=${1,,}
 
     # Strip point release.
-    suspect=${suspect%."${suspect#*.*.}"}
+    distro=${distro%."${distro#*.*.}"}
 
     # Check $pool for known names and version numbers.
 
@@ -189,7 +188,7 @@ set_distro () {
     for el in "${pool[@]}"; do
         IFS=: read -r release name status <<< "$el"
 
-        if [[ $suspect == "$release" || $suspect == "$name" ]]; then
+        if [[ $distro == "$release" || $distro == "$name" ]]; then
             distro=$name
             is_current=${status:-n}
             return
@@ -198,12 +197,11 @@ set_distro () {
 
     # Check for single-word names.
 
-    if [[ ${#suspect} -gt 3 && $suspect == +([a-z]) ]]; then
-        log_warn "The script is not aware of Ubuntu ${suspect^}." \
+    if [[ ${#distro} -gt 3 && $distro == +([a-z]) ]]; then
+        log_warn "The script is not aware of Ubuntu ${distro^}." \
                  "It may be a new release or you spelled it wrong"
 
         # Assume a current release.
-        distro=$suspect
         is_current=y
         return
     fi
@@ -211,14 +209,14 @@ set_distro () {
     # Check for numeric versions.
 
     local year month
-    IFS=. read -r year month _ <<< "$suspect"
+    IFS=. read -r year month _ <<< "$distro"
 
     if [[ $year == [2-9][0-9] && ( $month == 04 || $month == 10 ) ]]; then
-        bye "The script is not aware of Ubuntu ${suspect}." \
+        bye "The script is not aware of Ubuntu ${distro}." \
             "Use its name instead of the numbers"
     fi
 
-    bye "'$suspect' doesnt look like a valid Ubuntu release"
+    bye "'$distro' doesnt look like a valid Ubuntu release"
 }
 
 print_header() {
