@@ -74,9 +74,6 @@ OPTIONS (defaults are star-marked) --
                              Toggle the corresponding component
 
   --all                      Shortcut for --restricted --universe --multiverse
-  --compact --no-compact*    Toggle packing components into a single
-                             line. 'main' and 'restricted' (if enabled) always
-                             come together like in stock sources.list
 
   --updates* --security* --backports --proposed
   --no-updates --no-security --no-backports* --no-proposed*
@@ -91,7 +88,7 @@ OPTIONS (defaults are star-marked) --
 
 EXAMPLES --
   ubuntu-sources jammy
-  ubuntu-sources --all --compact 22.04 cdn
+  ubuntu-sources --all 22.04 cdn
   ubuntu-sources --universe --no-updates --src noble
   ubuntu-sources --all --no-multiverse --backports 24.04 fr
 
@@ -128,20 +125,6 @@ apt_list () {
     done
 
     lines+=('')
-}
-
-# Upper: plan
-do_plan () {
-    local el list=()
-
-    for el in "${plan[@]}"; do
-        if [[ $el == . ]]; then
-            apt_list "${list[@]}"
-            list=()
-        else
-            list+=("$el")
-        fi
-    done
 }
 
 # Outer: pool
@@ -254,7 +237,6 @@ defaults=(
     restricted:n universe:n multiverse:n
 
     security:y updates:y backports:n proposed:n
-    compact:n
     direct_security:y
     src:n
 )
@@ -352,25 +334,16 @@ main () {
         url_security=http://security.ubuntu.com/ubuntu/
     fi
 
-    local plan=(main)
+    local list=(main)
 
-    # Collect 'main' and 'restricted' in a single line.
-    [[ $opt_restricted == n ]] || plan+=(restricted)
+    [[ $opt_restricted == n ]] || list+=(restricted)
+    [[ $opt_universe == n ]] || list+=(universe)
+    [[ $opt_multiverse == n ]] || list+=(multiverse)
 
-    if [[ $opt_compact == n ]]; then
-        [[ $opt_universe == n ]] || plan+=(. universe)
-        [[ $opt_multiverse == n ]] || plan+=(. multiverse)
-    else
-        [[ $opt_universe == n ]] || plan+=(universe)
-        [[ $opt_multiverse == n ]] || plan+=(multiverse)
-    fi
-
-    plan+=(.)
     local lines=()
 
-    prefix=deb do_plan
-
-    [[ $opt_src == n ]] || prefix=deb-src do_plan
+    prefix=deb apt_list "${list[@]}"
+    [[ $opt_src == n ]] || prefix=deb-src apt_list "${list[@]}"
 
     print_header
     printf '%s\n' "${lines[@]}"
