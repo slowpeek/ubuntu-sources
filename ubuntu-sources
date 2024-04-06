@@ -1,0 +1,382 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2154
+
+# MIT license (c) 2021-2024 https://github.com/slowpeek
+# Homepage: https://github.com/slowpeek/ubuntu-sources
+# About: Apt sources generator for Ubuntu
+
+case "$BASH_VERSION" in
+    [2-3].*|4.[0-2]*)
+        echo "This script requires bash 4.3, yours is $BASH_VERSION"
+        exit 1 ;;
+esac
+
+set -eu
+
+SCRIPT_VERSION=24.02.xx+git
+
+if [[ -t 2 ]]; then
+    t_green=$'\e[32m'
+    t_red=$'\e[31m'
+    t_yellow=$'\e[33m'
+    t_reset=$'\e(B\e[m'
+else
+    t_green=
+    t_red=
+    t_yellow=
+    t_reset=
+fi
+
+verb=3
+
+_log() {
+    (( verb >= $1 )) || return 0
+    echo "$2" "${@:3}" >&2
+}
+
+log_info() { _log 3 "${t_green}info:${t_reset}" "$@"; }
+log_warn() { _log 2 "${t_yellow}warning:${t_reset}" "$@"; }
+log_err() { _log 1 "${t_red}error:${t_reset}" "$@"; }
+
+bye() {
+    log_err "$@"
+    exit 1
+}
+
+version() {
+    echo "ubuntu-sources ${SCRIPT_VERSION}"
+    exit
+}
+
+usage () {
+    cat <<'EOF'
+Usage: ubuntu-sources [options] distro [region]
+
+Distro can be either a name (e.g. noble) or a version number (e.g. 24.04).
+
+REGION TO MIRROR RELATION --
+  XY country code            http://XY.archive.ubuntu.com/ubuntu/
+  cdn                        mirror://mirrors.ubuntu.com/mirrors.txt
+  old                        http://old-releases.ubuntu.com/ubuntu/
+
+  If region is not set, the mirror used is http://archive.ubuntu.com/ubuntu/.
+  Old known releases are treated as such without explicit 'old' region.
+
+GENERIC OPTIONS --
+  -h, --help                 Show usage
+  -q                         Mute info messages. Use it twice (or -qq) to mute
+                             warnings as well
+  -V, --version              Show version
+
+OPTIONS (defaults are star-marked) --
+  --restricted --universe --multiverse
+  --no-restricted* --no-universe* --no-multiverse*
+                             Toggle the corresponding component
+
+  --all                      Shortcut for --restricted --universe --multiverse
+  --compact --no-compact*    Toggle packing components into a single
+                             line. 'main' and 'restricted' (if enabled) always
+                             come together like in stock sources.list
+
+  --updates* --security* --backports --proposed
+  --no-updates --no-security --no-backports* --no-proposed*
+                             Toggle the corresponding channel
+
+  --direct-security* --no-direct-security
+                             Toggle use of security.ubuntu.com for the security
+                             channel. If disabled, generic mirrors are used
+                             instead. Only applicable to current releases
+
+  --src --no-src*            Toggle deb-src repo
+
+EXAMPLES --
+  ubuntu-sources jammy
+  ubuntu-sources --all --compact 22.04 cdn
+  ubuntu-sources --universe --no-updates --src noble
+  ubuntu-sources --all --no-multiverse --backports 24.04 fr
+
+EOF
+
+    exit
+}
+
+is_opt() {
+    local -n ref=opt_$1
+    [[ -v ref ]]
+}
+
+set_opt() {
+    local -n ref=opt_$1
+    ref=$2
+}
+
+eq_opt() {
+    local -n ref=opt_$1
+    [[ $ref == "$2" ]]
+}
+
+# Upper: lines prefix url url_security distro
+apt_list () {
+    lines+=("${prefix} ${url} ${distro} $*")
+
+    local channel repo_url
+    for channel in updates security backports proposed; do
+        if eq_opt "$channel" y; then
+            [[ $channel == security ]] && repo_url=$url_security || repo_url=$url
+            lines+=("${prefix} ${repo_url} ${distro}-${channel} $*")
+        fi
+    done
+
+    lines+=('')
+}
+
+# Upper: plan
+do_plan () {
+    local el list=()
+
+    for el in "${plan[@]}"; do
+        if [[ $el == . ]]; then
+            apt_list "${list[@]}"
+            list=()
+        else
+            list+=("$el")
+        fi
+    done
+}
+
+# Outer: pool
+set_pool () {
+    pool=()
+
+    # Format: release:name[:is_current]. "Current" means it is listed under
+    # http://archive.ubuntu.com/ubuntu/dists/. It is not in sync with the
+    # official EOL terms from /usr/share/distro-info/ubuntu.csv
+
+    local matrix=(
+        24.04:noble:y
+        22.04:jammy:y    22.10:kinetic    23.04:lunar:y    23.10:mantic:y
+        20.04:focal:y    20.10:groovy     21.04:hirsute    21.10:impish
+        18.04:bionic:y   18.10:cosmic     19.04:disco      19.10:eoan
+        16.04:xenial:y   16.10:yakkety    17.04:zesty      17.10:artful
+        14.04:trusty:y   14.10:utopic     15.04:vivid      15.10:wily
+        12.04:precise    12.10:quantal    13.04:raring     13.10:saucy
+        10.04:lucid      10.10:maverick   11.04:natty      11.10:oneiric
+        8.04:hardy       8.10:intrepid    9.04:jaunty      9.10:karmic
+        6.06:dapper      6.10:edgy        7.04:feisty      7.10:gutsy
+        --               4.10:warty       5.04:hoary       5.10:breezy
+    )
+
+    local el
+    for el in "${matrix[@]}"; do
+        [[ $el == -- ]] || pool+=("$el")
+    done
+}
+
+# Outer: distro is_current
+set_distro () {
+    local pool=()
+    set_pool
+
+    distro=
+    local suspect=${1,,}
+
+    # Strip point release.
+    suspect=${suspect%."${suspect#*.*.}"}
+
+    # Check $pool for known names and version numbers.
+
+    local el release name status
+    for el in "${pool[@]}"; do
+        IFS=: read -r release name status <<< "$el"
+
+        if [[ $suspect == "$release" || $suspect == "$name" ]]; then
+            distro=$name
+            is_current=${status-n}
+            return
+        fi
+    done
+
+    # Check for single-word names.
+
+    if [[ ${#suspect} -gt 3 && -z ${suspect//[a-z]/} ]]; then
+        log_warn "The script is not aware of Ubuntu ${suspect^}." \
+                 "It may be a new release or you spelled it wrong"
+
+        # Assume a current release.
+        distro=$suspect
+        is_current=y
+        return
+    fi
+
+    # Check for numeric versions.
+
+    local year month
+    IFS=. read -r year month _ <<< "$suspect"
+
+    if [[ $year == [2-9][0-9] && ( $month == 04 || $month == 10 ) ]]; then
+        bye "The script is not aware of Ubuntu ${suspect}." \
+            "Use its name instead of the numbers"
+    fi
+
+    bye "'$suspect' doesnt look like a valid Ubuntu release"
+}
+
+print_header() {
+    echo "# -- Generated by ubuntu-sources ${SCRIPT_VERSION}"
+    echo
+}
+
+print_footer() {
+    local args=() el opt neg
+
+    # Figure out which options differ from the defaults.
+
+    for el in "${defaults[@]}"; do
+        opt=${el%:*}
+
+        if ! eq_opt "$opt" "${el#*:}"; then
+            eq_opt "$opt" y && neg= || neg=no-
+            args+=("--${neg}${opt//_/-}")
+        fi
+    done
+
+    # Assuming these options are listed first and in this order in $defaults.
+    if [[ ${args[*]} == '--restricted --universe --multiverse'* ]]; then
+        args=(--all "${args[@]:3}")
+    fi
+
+    args+=("$distro")
+    [[ -z $region ]] || args+=("$region")
+
+    echo "# -- ubuntu-sources ${args[*]}"
+}
+
+defaults=(
+    # print_footer() assumes these ones are listed first and in this order.
+    restricted:n universe:n multiverse:n
+
+    security:y updates:y backports:n proposed:n
+    compact:n
+    direct_security:y
+    src:n
+)
+
+_() {
+    unset -f _
+
+    # Propagate $defaults into $opt_ vars.
+
+    local el
+    for el in "${defaults[@]}"; do
+        set_opt "${el%:*}" "${el#*:}"
+    done
+}; _
+
+main () {
+    local opt val
+    while (( $# )); do
+        case $1 in
+            --)
+                shift
+                break ;;
+
+            -h|--help)
+                usage ;;
+
+            -q)
+                (( --verb )) || verb=1 ;;
+
+            -qq)
+                verb=1 ;;
+
+            -V|--version)
+                version ;;
+
+            --all)
+                opt_restricted=y
+                opt_universe=y
+                opt_multiverse=y ;;
+
+            --*)
+                opt=${1:2}
+                val=y
+
+                if [[ $opt == no-* ]]; then
+                    opt=${opt:3}
+                    val=n
+                fi
+
+                opt=${opt//-/_}
+
+                is_opt "$opt" || bye "Unknown option '$1'"
+                set_opt "$opt" "$val" ;;
+
+            -*)
+                bye "Unknown option '$1'" ;;
+
+            *)
+                break ;;
+        esac
+
+        shift
+    done
+
+    (( $# )) || usage
+
+    local distro is_current
+    set_distro "$1"
+
+    local region=${2-} url=http://old-releases.ubuntu.com/ubuntu/
+    region=${region,,}
+
+    if [[ $is_current == y ]]; then
+        case $region in
+            '')
+                url=http://archive.ubuntu.com/ubuntu/ ;;
+            cdn)
+                url=mirror://mirrors.ubuntu.com/mirrors.txt ;;
+            old)
+                [[ $is_current == y ]] && is_current=n || region= ;;
+            [a-z][a-z])
+                url=http://${region}.archive.ubuntu.com/ubuntu/ ;;
+            *)
+                bye "Invalid region value '${region}'" ;;
+        esac
+    else
+        [[ ${region:-old} == old ]] ||
+            log_warn "Ubuntu ${distro^} is an old release, region is inapplicable"
+
+        region=
+    fi
+
+    local url_security=$url
+    if [[ $opt_direct_security == y && $is_current == y ]]; then
+        url_security=http://security.ubuntu.com/ubuntu/
+    fi
+
+    local plan=(main)
+
+    # Collect 'main' and 'restricted' in a single line.
+    [[ $opt_restricted == n ]] || plan+=(restricted)
+
+    if [[ $opt_compact == n ]]; then
+        [[ $opt_universe == n ]] || plan+=(. universe)
+        [[ $opt_multiverse == n ]] || plan+=(. multiverse)
+    else
+        [[ $opt_universe == n ]] || plan+=(universe)
+        [[ $opt_multiverse == n ]] || plan+=(multiverse)
+    fi
+
+    plan+=(.)
+    local lines=()
+
+    prefix=deb do_plan
+
+    [[ $opt_src == n ]] || prefix=deb-src do_plan
+
+    print_header
+    printf '%s\n' "${lines[@]}"
+    print_footer
+}
+
+[[ ! ${BASH_SOURCE[0]##*/} == "${0##*/}" ]] || main "$@"
