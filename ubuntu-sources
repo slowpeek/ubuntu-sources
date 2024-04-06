@@ -85,11 +85,12 @@ OPTIONS (defaults are star-marked) --
                              instead. Only applicable to current releases
 
   --src --no-src*            Toggle deb-src repo
+  --deb822 --no-deb822*      Toggle deb822 format
 
 EXAMPLES --
   ubuntu-sources jammy
   ubuntu-sources --all 22.04 cdn
-  ubuntu-sources --universe --no-updates --src noble
+  ubuntu-sources --universe --no-updates --src --deb822 noble
   ubuntu-sources --all --no-multiverse --backports 24.04 fr
 
 EOF
@@ -112,19 +113,51 @@ eq_opt() {
     [[ $ref == "$2" ]]
 }
 
-# Upper: lines prefix url url_security distro
+# Upper: plan components distro lines
 apt_list () {
-    lines+=("${prefix} ${url} ${distro} $*")
+    local url el init=y
 
-    local channel repo_url
-    for channel in updates security backports proposed; do
-        if eq_opt "$channel" y; then
-            [[ $channel == security ]] && repo_url=$url_security || repo_url=$url
-            lines+=("${prefix} ${repo_url} ${distro}-${channel} $*")
-        fi
-    done
+    if eq_opt deb822 y; then
+        local suites=()
 
-    lines+=('')
+        for el in "${plan[@]}"; do
+            if [[ $init == y ]]; then
+                url=$el
+                init=n
+            elif [[ $el == . ]]; then
+                lines+=(
+                    "Types: $*"
+                    "URIs: ${url}"
+                    "Suites: ${suites[*]}"
+                    "Components: ${components[*]}"
+                    'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg'
+                    ''
+                )
+
+                suites=()
+                init=y
+            else
+                suites+=("$el")
+            fi
+        done
+    else
+        local type
+
+        for type; do
+            for el in "${plan[@]}"; do
+                if [[ $init == y ]]; then
+                    url=$el
+                    init=n
+                elif [[ $el == . ]]; then
+                    init=y
+                else
+                    lines+=("${type} ${url} ${el} ${components[*]}")
+                fi
+            done
+
+            lines+=('')
+        done
+    fi
 }
 
 # Outer: pool
@@ -239,6 +272,7 @@ defaults=(
     security:y updates:y backports:n proposed:n
     direct_security:y
     src:n
+    deb822:n
 )
 
 _() {
@@ -334,16 +368,34 @@ main () {
         url_security=http://security.ubuntu.com/ubuntu/
     fi
 
-    local list=(main)
+    local plan=("$url" "$distro") suite
 
-    [[ $opt_restricted == n ]] || list+=(restricted)
-    [[ $opt_universe == n ]] || list+=(universe)
-    [[ $opt_multiverse == n ]] || list+=(multiverse)
+    if [[ $url == "$url_security" ]] ; then
+        for suite in security updates backports proposed; do
+            eq_opt "$suite" n || plan+=("${distro}-${suite}")
+        done
+    else
+        for suite in updates backports proposed; do
+            eq_opt "$suite" n || plan+=("${distro}-${suite}")
+        done
 
-    local lines=()
+        if eq_opt security y; then
+            plan+=(. "$url_security" "$distro"-security)
+        fi
+    fi
 
-    prefix=deb apt_list "${list[@]}"
-    [[ $opt_src == n ]] || prefix=deb-src apt_list "${list[@]}"
+    plan+=(.)
+
+    local components=(main)
+
+    [[ $opt_restricted == n ]] || components+=(restricted)
+    [[ $opt_universe == n ]] || components+=(universe)
+    [[ $opt_multiverse == n ]] || components+=(multiverse)
+
+    local lines=() types=(deb)
+    [[ $opt_src == n ]] || types+=(deb-src)
+
+    apt_list "${types[@]}"
 
     print_header
     printf '%s\n' "${lines[@]}"
