@@ -336,7 +336,7 @@ main () {
             cdn)
                 url=mirror://mirrors.ubuntu.com/mirrors.txt ;;
             old)
-                [[ $is_current == y ]] && is_current=n || region= ;;
+                is_current=n ;;
             [a-z][a-z])
                 url=http://${region}.archive.ubuntu.com/ubuntu/ ;;
             *)
