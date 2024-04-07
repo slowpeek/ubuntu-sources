@@ -85,12 +85,12 @@ OPTIONS (defaults are star-marked) --
                              instead. Only applicable to current releases
 
   --src --no-src*            Toggle deb-src repo
-  --deb822 --no-deb822*      Toggle deb822 format
+  --deb822 --no-deb822**     Toggle deb822 format. Enabled by default since 24.04
 
 EXAMPLES --
   ubuntu-sources jammy
   ubuntu-sources --all 22.04 cdn
-  ubuntu-sources --universe --no-updates --src --deb822 noble
+  ubuntu-sources --universe --no-updates --src noble
   ubuntu-sources --all --no-multiverse --backports 24.04 fr
 
 EOF
@@ -99,8 +99,7 @@ EOF
 }
 
 is_opt() {
-    local -n ref=opt_$1
-    [[ -v ref ]]
+    [[ $known_opts == *:"$1":* ]]
 }
 
 set_opt() {
@@ -188,12 +187,13 @@ set_pool () {
     done
 }
 
-# Outer: distro is_current
+# Outer: distro distro_number is_current
 set_distro () {
     local pool=()
     set_pool
 
     distro=${1,,}
+    distro_number=
 
     # Strip point release.
     distro=${distro%."${distro#*.*.}"}
@@ -206,6 +206,7 @@ set_distro () {
 
         if [[ $distro == "$release" || $distro == "$name" ]]; then
             distro=$name
+            distro_number=$release
             is_current=${status:-n}
             return
         fi
@@ -265,6 +266,7 @@ print_footer() {
     echo "# -- ubuntu-sources ${args[*]}"
 }
 
+known_opts=:
 defaults=(
     # print_footer() assumes these ones are listed first and in this order.
     restricted:n universe:n multiverse:n
@@ -275,14 +277,40 @@ defaults=(
     deb822:n
 )
 
+set_default() {
+    local el i=0
+
+    for el in "${defaults[@]}"; do
+        if [[ $el == "$1":* ]]; then
+            defaults[i]=$1:$2
+            break
+        fi
+
+        (( ++i ))
+    done
+}
+
+import_defaults() {
+    local el
+
+    for el in "${defaults[@]}"; do
+        local -n ref=opt_${el%:*}
+        [[ -v ref ]] || ref=${el#*:}
+        unset -n ref
+    done
+}
+
 _() {
     unset -f _
 
-    # Propagate $defaults into $opt_ vars.
+    # Ensure known opt_ vars dont exist on start and propagate $known_opts
 
-    local el
+    local el opt
     for el in "${defaults[@]}"; do
-        set_opt "${el%:*}" "${el#*:}"
+        opt=${el%:*}
+
+        unset -v opt_"$opt"
+        known_opts+=$opt:
     done
 }; _
 
@@ -337,8 +365,15 @@ main () {
 
     (( $# )) || usage
 
-    local distro is_current
+    local distro distro_number is_current
     set_distro "$1"
+
+    if [[ -z $distro_number || ${distro_number%.*} -gt 23 ]]; then
+        # Use deb822 format by default since 24.04
+        set_default deb822 y
+    fi
+
+    import_defaults
 
     local region=${2-} url=http://old-releases.ubuntu.com/ubuntu/
     region=${region,,}
