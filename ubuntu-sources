@@ -77,11 +77,11 @@ OPTIONS (defaults are star-marked) --
 
   --updates* --security* --backports --proposed
   --no-updates --no-security --no-backports* --no-proposed*
-                             Toggle the corresponding channel
+                             Toggle the corresponding suite
 
   --direct-security* --no-direct-security
                              Toggle use of security.ubuntu.com for the security
-                             channel. If disabled, generic mirrors are used
+                             suite. If disabled, generic mirrors are used
                              instead. Only applicable to current releases
 
   --src --no-src*            Toggle deb-src repo
