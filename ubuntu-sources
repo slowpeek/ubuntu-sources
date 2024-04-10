@@ -3,7 +3,7 @@
 
 # MIT license (c) 2021-2024 https://github.com/slowpeek
 # Homepage: https://github.com/slowpeek/ubuntu-sources
-# About: Apt sources generator for Ubuntu
+# About: Apt sources generator for Ubuntu and Debian
 
 case "$BASH_VERSION" in
     [2-3].*|4.[0-2]*)
@@ -14,11 +14,7 @@ esac
 set -eu
 
 SCRIPT_VERSION=24.02.xx+git
-
-os=ubuntu
-os_components=(restricted universe multiverse)
-# In the following, it is assumed security comes first
-os_suites=(security updates backports proposed)
+SCRIPT_SELF=${BASH_SOURCE[0]##*/}
 
 if [[ -t 2 ]]; then
     t_green=$'\e[32m'
@@ -48,31 +44,51 @@ bye() {
     exit 1
 }
 
-version() {
-    echo "${os}-sources ${SCRIPT_VERSION}"
-    exit
-}
+[[ $SCRIPT_SELF == *@(ubuntu|debian)* ]] ||
+    bye 'The script should be called by a name containing either "ubuntu" or "debian"'
 
-usage () {
-    cat <<'EOF'
-Usage: ubuntu-sources [options] distro [region]
+if [[ $SCRIPT_SELF == *ubuntu* ]]; then
+    os=ubuntu
+    os_components=(restricted universe multiverse)
+    # In the following, it is assumed security comes first
+    os_suites=(security updates backports proposed)
+    os_url_security=http://security.ubuntu.com/ubuntu/
+    os_url_region=http://CC.archive.ubuntu.com/ubuntu/
+    os_url_old=http://old-releases.ubuntu.com/ubuntu/
+    os_url_cdn=mirror://mirrors.ubuntu.com/mirrors.txt
+    os_url=http://archive.ubuntu.com/ubuntu/
+    os_region_warning=n
+    os_release_format='*.*'
+    os_reject=
+    os_future='[2-9][0-9].@(04|10)'
+    os_classic='@(?|1?|2[0-3]).*'
 
-Distro can be either a name (e.g. noble) or a version number (e.g. 24.04).
+    # Format: release:name[:is_current]. "Current" means it is listed in the repos
+    # for supported releases. It could be not in sync with the official EOL terms
+    os_matrix=(
+        24.04:noble:y
+        22.04:jammy:y    22.10:kinetic    23.04:lunar:y    23.10:mantic:y
+        20.04:focal:y    20.10:groovy     21.04:hirsute    21.10:impish
+        18.04:bionic:y   18.10:cosmic     19.04:disco      19.10:eoan
+        16.04:xenial:y   16.10:yakkety    17.04:zesty      17.10:artful
+        14.04:trusty:y   14.10:utopic     15.04:vivid      15.10:wily
+        12.04:precise    12.10:quantal    13.04:raring     13.10:saucy
+        10.04:lucid      10.10:maverick   11.04:natty      11.10:oneiric
+        8.04:hardy       8.10:intrepid    9.04:jaunty      9.10:karmic
+        6.06:dapper      6.10:edgy        7.04:feisty      7.10:gutsy
+        --               4.10:warty       5.04:hoary       5.10:breezy
+    )
 
-REGION TO MIRROR RELATION --
-  XY country code            http://XY.archive.ubuntu.com/ubuntu/
-  cdn                        mirror://mirrors.ubuntu.com/mirrors.txt
-  old                        http://old-releases.ubuntu.com/ubuntu/
+    os_set_distro_hook() {
+        :
+    }
 
-  If region is not set, the mirror used is http://archive.ubuntu.com/ubuntu/.
-  Old known releases are treated as such without explicit 'old' region.
+    os_security_suite_hook() {
+        :
+    }
 
-GENERIC OPTIONS --
-  -h, --help                 Show usage
-  -q                         Mute info messages. Use it twice (or -qq) to mute
-                             warnings as well
-  -V, --version              Show version
-
+    os_usage() {
+        cat <<'EOF'
 OPTIONS (defaults are star-marked) --
   --restricted --universe --multiverse
   --no-restricted* --no-universe* --no-multiverse*
@@ -80,8 +96,8 @@ OPTIONS (defaults are star-marked) --
 
   --all                      Shortcut for --restricted --universe --multiverse
 
-  --updates* --security* --backports --proposed
-  --no-updates --no-security --no-backports* --no-proposed*
+  --security* --updates* --backports --proposed
+  --no-security --no-updates --no-backports* --no-proposed*
                              Toggle the corresponding suite
 
   --direct-security* --no-direct-security
@@ -90,14 +106,115 @@ OPTIONS (defaults are star-marked) --
                              instead. Only applicable to current releases
 
   --src --no-src*            Toggle deb-src repo
-  --deb822 --no-deb822**     Toggle deb822 format. Enabled by default since 24.04
+  --deb822** --no-deb822     Toggle deb822 format. On since ubuntu 24.04
 
 EXAMPLES --
   ubuntu-sources jammy
-  ubuntu-sources --all 22.04 cdn
   ubuntu-sources --universe --no-updates --src noble
   ubuntu-sources --all --no-multiverse --backports 24.04 fr
 
+EOF
+    }
+else
+    os=debian
+    os_components=(contrib non_free non_free_firmware)
+    # In the following, it is assumed security comes first
+    os_suites=(security updates backports backports_sloppy proposed_updates)
+    os_url_security=http://security.debian.org/debian-security/
+    os_url_region=http://ftp.XX.debian.org/debian/
+    os_url_old=http://archive.debian.org/debian/
+    os_url_cdn=http://deb.debian.org/debian/
+    os_url=http://deb.debian.org/debian/
+    os_region_warning=y
+    os_release_format='*'
+    os_reject='[1-6]?(.*)'
+    os_future='[1-9][0-9]'
+    os_classic='@(?|1[01])'
+
+    # Format: release:name[:is_current]. "Current" means it is listed in the repos
+    # for supported releases. It could be not in sync with the official EOL terms
+    os_matrix=(
+        10:buster:y      11:bullseye:y    12:bookworm:y    13:trixie:y
+        --               7:wheezy         8:jessie         9:stretch
+        # Not supported releases. Upcase X is important
+        X:squeeze        --               --               --
+        X:woody          X:sarge          X:etch           X:lenny
+        X:bo             X:hamm           X:slink          X:potato
+        --               --               X:buzz           X:rex
+    )
+
+    os_set_distro_hook() {
+        if [[ -n $distro_number && $distro_number -lt 12 ]]; then
+            # non-free-firmware is a thing since 12
+            array_del os_components non_free_firmware
+            array_del defaults 'non_free_firmware:*'
+            known_opts=${known_opts//non_free_firmware:/}
+        fi
+    }
+
+    os_security_suite_hook() {
+        (( distro_number > 10 )) || suite=$distro/updates
+    }
+
+    os_usage() {
+        cat <<'EOF'
+OPTIONS (defaults are star-marked) --
+  --contrib --non-free --non-free-firmware
+  --no-contrib* --no-non-free* --no-non-free-firmware*
+                             Toggle the corresponding component
+
+  --all                      Shortcut for --contrib --non-free and
+                             --non-free-firmware, if applicable
+
+  --security* --updates* --backports --backports-sloppy --proposed-updates
+  --no-security --no-updates --no-backports* --no-backports-sloppy* --no-proposed-updates*
+                             Toggle the corresponding suite
+
+  --direct-security* --no-direct-security
+                             Toggle use of security.debian.org for the security
+                             suite. If disabled, generic mirrors are used
+                             instead. Only applicable to current releases
+
+  --src --no-src*            Toggle deb-src repo
+  --deb822** --no-deb822     Toggle deb822 format. On since debian 12
+
+EXAMPLES --
+  debian-sources bullseye
+  debian-sources --contrib --no-updates --src bookworm
+  debian-sources --all --no-non-free-firmware --backports 12 fr
+
+EOF
+    }
+fi
+
+version() {
+    echo "${os}-sources ${SCRIPT_VERSION}"
+    exit
+}
+
+usage () {
+    cat <<EOF
+Usage: ${os}-sources [options] distro [region]
+
+Distro can be either a name or a version number.
+
+REGION TO MIRROR RELATION --
+  CC country code            ${os_url_region}
+  cdn                        ${os_url_cdn}
+  old                        ${os_url_old}
+
+  If region is not set, the mirror used is ${os_url}.
+  Old known releases are treated as such without explicit 'old' region.
+
+GENERIC OPTIONS --
+  -h, --help                 Show usage
+  -q                         Mute info messages. Use it twice (or -qq) to mute
+                             warnings as well
+  -V, --version              Show version
+
+$(os_usage)
+
+Homepage: https://github.com/slowpeek/ubuntu-sources
 EOF
 
     exit
@@ -168,26 +285,8 @@ apt_list () {
 set_pool () {
     pool=()
 
-    # Format: release:name[:is_current]. "Current" means it is listed under
-    # http://archive.ubuntu.com/ubuntu/dists/. It is not in sync with the
-    # official EOL terms from /usr/share/distro-info/ubuntu.csv
-
-    local matrix=(
-        24.04:noble:y
-        22.04:jammy:y    22.10:kinetic    23.04:lunar:y    23.10:mantic:y
-        20.04:focal:y    20.10:groovy     21.04:hirsute    21.10:impish
-        18.04:bionic:y   18.10:cosmic     19.04:disco      19.10:eoan
-        16.04:xenial:y   16.10:yakkety    17.04:zesty      17.10:artful
-        14.04:trusty:y   14.10:utopic     15.04:vivid      15.10:wily
-        12.04:precise    12.10:quantal    13.04:raring     13.10:saucy
-        10.04:lucid      10.10:maverick   11.04:natty      11.10:oneiric
-        8.04:hardy       8.10:intrepid    9.04:jaunty      9.10:karmic
-        6.06:dapper      6.10:edgy        7.04:feisty      7.10:gutsy
-        --               4.10:warty       5.04:hoary       5.10:breezy
-    )
-
     local el
-    for el in "${matrix[@]}"; do
+    for el in "${os_matrix[@]}"; do
         [[ $el == -- ]] || pool+=("$el")
     done
 }
@@ -200,8 +299,13 @@ set_distro () {
     distro=${1,,}
     distro_number=
 
+    # shellcheck disable=SC2053
+    [[ ! $distro == $os_reject ]] ||
+        bye "This script does not support ${os^} ${distro}"
+
     # Strip point release.
-    distro=${distro%."${distro#*.*.}"}
+    # shellcheck disable=SC2295
+    distro=${distro%."${distro#${os_release_format}.}"}
 
     # Check $pool for known names and version numbers.
 
@@ -233,15 +337,13 @@ set_distro () {
 
     # Check for numeric versions.
 
-    local year month
-    IFS=. read -r year month _ <<< "$distro"
-
-    if [[ $year == [2-9][0-9] && ( $month == 04 || $month == 10 ) ]]; then
+    # shellcheck disable=SC2053
+    if [[ $distro == $os_future ]]; then
         bye "The script is not aware of ${os^} ${distro}." \
             "Use its name instead of the numbers"
     fi
 
-    bye "'$distro' doesnt look like a valid ${os^} release"
+    bye "'${1,,}' doesnt look like a valid ${os^} release"
 }
 
 print_header() {
@@ -339,7 +441,7 @@ _() {
     defaults+=(
         direct_security:y
         src:n
-        deb822:n
+        deb822:y
     )
 
     # Ensure known opt_ vars dont exist on start and propagate $known_opts
@@ -404,27 +506,29 @@ main () {
 
     local distro distro_number is_current
     set_distro "$1"
+    os_set_distro_hook
 
-    if [[ -z $distro_number || ${distro_number%.*} -gt 23 ]]; then
-        # Use deb822 format by default since 24.04
-        set_default deb822 y
-    fi
+    # shellcheck disable=SC2053
+    [[ ! $distro_number == $os_classic ]] || set_default deb822 n
 
     import_defaults
 
-    local region=${2-} url=http://old-releases.ubuntu.com/ubuntu/
+    local region=${2-} url=$os_url_old
     region=${region,,}
 
     if [[ $is_current == y ]]; then
         case $region in
             '')
-                url=http://archive.ubuntu.com/ubuntu/ ;;
+                url=$os_url ;;
             cdn)
-                url=mirror://mirrors.ubuntu.com/mirrors.txt ;;
+                url=$os_url_cdn ;;
             old)
                 is_current=n ;;
             [a-z][a-z])
-                url=http://${region}.archive.ubuntu.com/ubuntu/ ;;
+                url=${os_url_region/CC/$region}
+
+                [[ $opt_direct_security == y || $os_region_warning == n ]] ||
+                    log_warn 'Not all country mirrors provide the security suite' ;;
             *)
                 bye "Invalid region value '${region}'" ;;
         esac
@@ -435,10 +539,11 @@ main () {
         region=
     fi
 
-    local url_security=$url
-    if [[ $opt_direct_security == y && $is_current == y ]]; then
-        url_security=http://security.ubuntu.com/ubuntu/
-    fi
+    local url_security=${url%/*/}/${os_url_security#*://*/}
+    [[ $url == *"/$os/" ]] || url_security=$url
+
+    [[ $opt_direct_security == n || $is_current == n ]] ||
+        url_security=$os_url_security
 
     local plan=("$url" "$distro") suite
 
@@ -449,7 +554,9 @@ main () {
 
     if [[ $opt_security == y ]]; then
         [[ $url == "$url_security" ]] || plan+=(. "$url_security")
-        plan+=("$distro"-security)
+        suite=$distro-security
+        os_security_suite_hook
+        plan+=("$suite")
     fi
 
     plan+=(.)
@@ -470,4 +577,4 @@ main () {
     print_footer
 }
 
-[[ ! ${BASH_SOURCE[0]##*/} == "${0##*/}" ]] || main "$@"
+[[ ! $SCRIPT_SELF == "${0##*/}" ]] || main "$@"
