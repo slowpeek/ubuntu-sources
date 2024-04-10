@@ -369,7 +369,7 @@ print_footer() {
     printf -v test_all ' --%s' "${os_components[@]//_/-}"
 
     # If all $os_components are enabled, replace it with --all
-    if [[ ${args[*]} == "${test_all:1}"* ]]; then
+    if [[ ${args[*]+"${args[*]}"} == "${test_all:1}"* ]]; then
         args=(--all "${args[@]:${#os_components[@]}}")
     fi
 
