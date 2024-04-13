@@ -121,7 +121,7 @@ else
     # In the following, it is assumed security comes first
     os_suites=(security updates backports backports_sloppy proposed_updates)
     os_url_security=http://security.debian.org/debian-security/
-    os_url_region=http://ftp.XX.debian.org/debian/
+    os_url_region=http://ftp.CC.debian.org/debian/
     os_url_old=http://archive.debian.org/debian/
     os_url_cdn=http://deb.debian.org/debian/
     os_url=http://deb.debian.org/debian/
