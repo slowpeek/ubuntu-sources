@@ -148,7 +148,7 @@ else
             # non-free-firmware is a thing since 12
             array_del os_components non_free_firmware
             array_del defaults 'non_free_firmware:*'
-            known_opts=${known_opts//non_free_firmware:/}
+            known_opts=${known_opts/:non_free_firmware:/:}
         fi
     }
 
