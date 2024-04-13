@@ -106,7 +106,7 @@ OPTIONS (defaults are star-marked) --
                              instead. Only applicable to current releases
 
   --src --no-src*            Toggle deb-src repo
-  --deb822** --no-deb822     Toggle deb822 format. On since ubuntu 24.04
+  --deb822** --no-deb822     Toggle deb822 format. On since Ubuntu 24.04
 
 EXAMPLES --
   ubuntu-sources jammy
@@ -176,7 +176,7 @@ OPTIONS (defaults are star-marked) --
                              instead. Only applicable to current releases
 
   --src --no-src*            Toggle deb-src repo
-  --deb822** --no-deb822     Toggle deb822 format. On since debian 12
+  --deb822** --no-deb822     Toggle deb822 format. On since Debian 12
 
 EXAMPLES --
   debian-sources bullseye
