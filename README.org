@@ -9,7 +9,8 @@ Ubuntu or Debian mode is decided by the name the script was called
 as. =ubuntu-sources= itself works in Ubuntu mode. When called by the
 =debian-sources= symlink, it works in Debian mode.
 
-The script requires =bash 4.3= (Ubuntu 14.04 / Debian 8).
+The script requires =bash 4.3+=, hence you need at least Ubuntu 14.04 / Debian 8
+to run it.
 
 #+begin_example
   > ubuntu-sources --all jammy
