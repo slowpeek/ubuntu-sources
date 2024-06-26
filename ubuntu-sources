@@ -108,6 +108,9 @@ OPTIONS (defaults are star-marked) --
   --src --no-src*            Toggle deb-src repo
   --deb822** --no-deb822     Toggle deb822 format. On since Ubuntu 24.04
 
+  --script                   Wrap the generated list into a `cat <<EOF .. EOF`
+                             script to write it into the default location
+
 EXAMPLES --
   ubuntu-sources jammy
   ubuntu-sources --universe --no-updates --src noble
