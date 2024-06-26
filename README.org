@@ -142,6 +142,9 @@ known releases are treated as such without explicit =old= region.
 - =--src --no-src*= :: Toggle =deb-src= repo
 - =--deb822** --no-deb822= :: Toggle =deb822= format. On since Debian 12
 
+- =--script= :: Wrap the generated list into a =cat <<EOF .. EOF= script to
+  write it into the default location
+
 *Examples*
 - =debian-sources bullseye=
 - =debian-sources --contrib --no-updates --src bookworm=
