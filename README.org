@@ -113,7 +113,7 @@ Distro can be either a name or a version number.
 
 *Region to mirror relation*
 
-| CC country code | =http://ftp.XX.debian.org/debian/=  |
+| CC country code | =http://ftp.CC.debian.org/debian/=  |
 | cdn             | =http://deb.debian.org/debian/=     |
 | old             | =http://archive.debian.org/debian/= |
 
