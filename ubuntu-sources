@@ -13,7 +13,7 @@ esac
 
 set -eu
 
-SCRIPT_VERSION=24.06.xx+git
+SCRIPT_VERSION=24.10.xx+git
 SCRIPT_SELF=${BASH_SOURCE[0]##*/}
 
 if [[ -t 2 ]]; then
