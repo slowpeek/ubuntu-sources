@@ -137,6 +137,7 @@ else
     # Format: release:name[:is_current]. "Current" means it is listed in the repos
     # for supported releases. It could be not in sync with the official EOL terms
     os_matrix=(
+        14:forky:y
         10:buster        11:bullseye:y    12:bookworm:y    13:trixie:y
         --               7:wheezy         8:jessie         9:stretch
         # Not supported releases. Upcase X is important
