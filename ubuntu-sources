@@ -66,7 +66,7 @@ if [[ $SCRIPT_SELF == *ubuntu* ]]; then
     # Format: release:name[:is_current]. "Current" means it is listed in the repos
     # for supported releases. It could be not in sync with the official EOL terms
     os_matrix=(
-        24.04:noble:y    24.10:oracular:y 25.04:plucky:y   25.10:questing:y
+        24.04:noble:y    24.10:oracular   25.04:plucky:y   25.10:questing:y
         22.04:jammy:y    22.10:kinetic    23.04:lunar      23.10:mantic
         20.04:focal:y    20.10:groovy     21.04:hirsute    21.10:impish
         18.04:bionic:y   18.10:cosmic     19.04:disco      19.10:eoan
